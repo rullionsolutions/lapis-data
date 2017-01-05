@@ -1,0 +1,20 @@
+{
+  "name": "lapis-data",
+  "version": "0.0.0",
+  "description": "Field, Entity and Data Management",
+  "main": "index.js",
+  "scripts": {
+    "test": "nodeunit test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:rullionsolutions/lapis-data"
+  },
+  "author": "stephen.d.francis@gmail.com",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "underscore": ">= 1.0.0",
+    "q": ">= 1.4.1",
+    "lapis-core": ">= 0.0.0"
+  }
+}

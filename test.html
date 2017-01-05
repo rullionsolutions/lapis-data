@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en"><!--  manifest="cache.manifest" -->
+	<head>
+		<title>Data Test</title>
+		<meta charset="utf-8">
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="description" content="">
+		<meta name="author" content="">
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+		<link rel="stylesheet" type="text/css" href="/cdn/twitter-bootstrap-v3.1.1/css/bootstrap.min.css" media="screen" />
+		<style type="text/css">
+			body						{ font-family: Arial; }
+		</style>
+	</head>
+	<body>
+		<h1>Data Test</h1>
+
+		<ol class="main">
+		</ol>
+
+
+	</body>
+
+
+	<script type="text/javascript" src="/cdn/jquery-v1.7.2/jquery-1.7.2.min.js"></script>
+	<script type="text/javascript" src="/cdn/underscore/underscore-min.js"></script>
+	<script type="text/javascript" src="/cdn/twitter-bootstrap-v3.1.1/js/bootstrap.min.js"></script>
+
+	<script type="text/javascript" src="../base/Base.js"> </script>
+	<script type="text/javascript" src="../base/Happen.js"> </script>
+	<script type="text/javascript" src="../base/Log.js"> </script>
+	<script type="text/javascript" src="../base/OrderedMap.js"> </script>
+
+	<script type="text/javascript" src="../store/Store.js"> </script>
+	<script type="text/javascript" src="../store/StoreIndexedDB.js"> </script>
+
+	<script type="text/javascript" src="../session/MessageManager.js"> </script>
+
+	<script type="text/javascript" src="FieldSet.js"> </script>
+	<script type="text/javascript" src="Entity.js"> </script>
+	<script type="text/javascript" src="Text.js"> </script>
+	<script type="text/javascript" src="Text-Validation.js"> </script>
+	<script type="text/javascript" src="Text-Render.js"> </script>
+	<script type="text/javascript" src="Date.js"> </script>
+	<script type="text/javascript" src="Number.js"> </script>
+	<script type="text/javascript" src="Reference.js"> </script>
+	<script type="text/javascript" src="Textarea.js"> </script>
+	<script type="text/javascript" src="Document.js"> </script>
+	<script type="text/javascript" src="DataManager.js"> </script>
+	<script type="text/javascript" src="DataManagerDocs.js"> </script>
+
+	<script type="text/javascript">
+
+		function assert(bool, text) {
+			$(".main").append("<li>" + (bool ? "--- OK --- " : "*** FAIL *** ") + text + "</li>");
+			count[bool ? "pass" : "fail"] += 1;
+		}
+
+	    var store = x.store.StoreIndexedDB.clone({ id: "DataTest", db_id: "datatest", instance: true, store_id: "main", version: 3 }),
+	    	dmgr  = x.data.DataManagerDocs.clone({ id: "Test", store: store, instance: true }),
+	    	count = { pass: 0, fail: 0 },
+	    	test_obj_1 = { a: "AAA", b: 7, c: true },
+	    	test_obj_1_local,
+	    	test_obj_1_remote,
+	    	test_obj_2 = { a: "Aardvark", b: 2.56723423 },
+	    	test_obj_3 = { a: { d: "DD", e: "EE" }, b: [ 1, 2, 4, 5 ], c: "CCC" },
+	    	test_obj_4 = { a: "Apple", b: 19, c: "<body><p>Hello Mate, <br/>How are you?</p></body>" };
+
+
+	    x.data.Entity.clone({ id: "tree", title: "Tree", primary_key: "species" });
+		x.data.entities.tree.addFields([
+	    	{ id: "species" , type: "Text", label: "Species" , mandatory: true },
+	    	{ id: "location", type: "Text", label: "Location", mandatory: true }
+    	]);
+
+	    store.start()
+			.then(function () {
+				assert(true, "SETUP");							//--------------------------------------------------------------------------
+				assert(true, "started okay");
+				return store.deleteAll();
+		    })
+			.then(function (results) {
+				assert(true, "cleared the client test store");
+				return store.getAll();
+			})
+			.then(function (results) {
+				assert(results.length === 0, "zero documents in test client store");
+			})
+			.then(function () {
+				var record = dmgr.createNewRecord("tree");
+				assert(record.status === 'U', "created a new record");
+				return record.getReadyPromise();
+			})
+			.then(function (record) {
+				dmgr.debug("about to set values and save");
+				try {
+					record.populateFromObject({ species: "Elm", location: "New Forest, Hampshire" });
+					assert(dmgr.getRecordNullIfNotInCache("tree", "Elm") === record, "Elm record retrievable in DataManager cache");
+					assert(record.isValid(), "record is valid");
+					assert(record.status === 'M', "record is modified according to status property: " + record.status);
+					assert(record.isModified(), "record is modified according to isModified()");
+					dmgr.save();
+					assert(record.status === 'S', "record is saving");
+				} catch (e) {
+					dmgr.report(e);
+				}
+				return record.getReadyPromise();
+			})
+			.then(function () {
+				var record = dmgr.getRecordNullIfNotInCache("tree", "Elm");
+				assert(record && (record.getUUID() === "tree:Elm"), "Elm record is in cache");
+
+				assert(record.status === 'U', "record is unmodified according to status property");
+				assert(!record.isModified(), "record is unmodified according to isModified()");
+
+				try {
+					record.getField("location").set("Ashton-under-Lyme");
+					assert(record.status === 'M', "record is modified according to status property: " + record.status);
+					assert(record.isModified(), "record is modified according to isModified()");
+
+
+					// record = dmgr.getRecord("tree", "Elm");
+					// assert(record.status === 'L', "loading an existing record");
+					// return record.getReadyPromise();
+					dmgr.save();
+					assert(record.status === 'S', "record is saving");
+				} catch (e) {
+					dmgr.report(e);
+				}
+				return record.getReadyPromise();
+			})
+			.then(function () {
+				var record = dmgr.getRecordNullIfNotInCache("tree", "Elm");
+				assert(record && (record.getUUID() === "tree:Elm"), "Elm record is in cache");
+
+				assert(record.status === 'U', "record is unmodified according to status property");
+				assert(!record.isModified(), "record is unmodified according to isModified()");
+
+
+// kill dmgr and re-create...
+
+		    	dmgr  = x.data.DataManagerDocs.clone({ id: "Test", store: store, instance: true });
+				record = dmgr.getRecordNullIfNotInCache("tree", "Elm");
+				assert(!record, "Elm record is NOT in cache");
+
+				record = dmgr.getRecord("tree", "Elm");
+				assert(record.status === 'L', "record is loading");
+
+				return record.getReadyPromise();
+			})
+			.then(function () {
+				var record = dmgr.getRecordNullIfNotInCache("tree", "Elm");
+				assert(record && (record.getUUID() === "tree:Elm"), "Elm record is in cache");
+				assert(record.getField("location").getText() === "Ashton-under-Lyme", "saved change retrieved");
+				assert(record.status === 'U', "record is unmodified according to status property: " + record.status);
+				assert(!record.isModified(), "record is unmodified according to isModified()");
+
+				try {
+					record.getField("species").set("Oak");
+					assert(false, "could change key of existing record");
+				} catch (e) {
+					assert(true , "can't change key of existing record");
+				}
+				assert(record.status === 'U', "record is still unmodified according to status property: " + record.status);
+				assert(!record.isModified(), "record is still unmodified according to isModified()");
+				assert(dmgr.getRecordCount().modified_total === 0, "no modified records");
+				try {
+					dmgr.save();
+					assert(false, "can save if no modified records to save");
+				} catch (e) {
+					assert(true , "can't save if no modified records to save");
+				}
+				record.getField("location").set("");
+				assert(!record.isValid(), "location set blank, record is not valid");
+				assert(!record.getField("location").isValid(), "location set blank, field is not valid");
+				try {
+					dmgr.save();
+					assert(false, "can save if record(s) invalid");
+				} catch (e) {
+					assert(true , "can't save if record(s) invalid");
+				}
+
+				record.getField("location").set("Bolton");
+				try {
+					dmgr.save();
+					assert(record.status === 'S', "record is saving");
+				} catch (e) {
+					dmgr.report(e);
+				}
+				return record.getReadyPromise();
+			})
+			.then(function () {
+				var record = dmgr.getRecordNullIfNotInCache("tree", "Elm");
+				assert(record && (record.getUUID() === "tree:Elm"), "Elm record is in cache");
+				assert(record.getField("location").getText() === "Bolton", "saved change retrieved");
+				assert(record.status === 'U', "record is unmodified according to status property: " + record.status);
+				assert(!record.isModified(), "record is unmodified according to isModified()");
+
+				record.setDelete(true);
+				assert(record.isDelete(), "Elm record to be deleted");
+				try {
+					dmgr.save();
+					assert(record.status === 'S', "record is saving");
+				} catch (e) {
+					dmgr.report(e);
+				}
+				return record.getReadyPromise();
+			})
+			.then(function () {
+				var record = dmgr.getRecordNullIfNotInCache("tree", "Elm");
+				assert(!record, "Elm record is NOT in cache");
+			})
+			.then(null, function (error) {
+				assert(false, error);
+			})
+			.then(function () {
+				$(".main").append("<li><b>" + count.pass + "</b> passes, <b>" + count.fail + "</b> fails</li>");
+			});
+
+
+	</script>
+</html>
