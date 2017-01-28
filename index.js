@@ -10,12 +10,11 @@ exports.Set = require("./Set.js");
 // exports.Document = require("./Document.js");
 
 exports.Request = require("./Request.js");
+exports.LoadRequest = require("./LoadRequest.js");
+exports.SaveRequest = require("./SaveRequest.js");
 
 exports.FieldSet = require("./FieldSet.js");
 exports.Entity = require("./Entity.js");
-
-exports.Store = require("./Store.js");
-exports.StoreTree = require("./StoreTree.js");
 
 exports.Text = require("./Text.js");
 exports.Date = require("./Date.js");

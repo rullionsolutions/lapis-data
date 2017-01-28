@@ -47,15 +47,15 @@ module.exports.define("getRecord", function (entity_id, key) {
 });
 
 
-module.exports.define("getExistingRecordNotInCache", function (entity_id, key) {
+module.exports.define("getExistingRecordNotInCache", function (entity_id, key, modifiable_once_loaded) {
     var record;
     if (this.getRecordNullIfNotInCache(entity_id, key)) {
         this.throwError("record already exists with entity id: " + entity_id + " and key: " + key);
     }
     record = Data.Entity.getEntityThrowIfNotFound(entity_id).getRecord({
-        data_manager: this,
+        manager: this,
         status: "L",
-        modifiable: true,
+        modifiable_once_loaded: modifiable_once_loaded,
         load_key: key,
     });
     // record.populateFromObject(values);
@@ -76,17 +76,7 @@ module.exports.define("getSavingPromise", function (record) {
 */
 
 module.exports.define("createNewRecord", function (entity_id) {
-    var record = Data.Entity.getEntityThrowIfNotFound(entity_id).getRecord({
-        data_manager: this,
-        status: "C",
-        modifiable: true,
-    });
-    record.setDefaultVals();
-    record.status = "U";
-    // this.record.generateKey();                  // which may move it into the curr_records cache
-    this.new_records.push(record);
-    record.happen("initCreate");
-    return record;
+    return Data.Entity.getEntityThrowIfNotFound(entity_id).createNewRecord(this);
 });
 
 
@@ -141,7 +131,7 @@ module.exports.define("addToCache", function (record, prev_key) {
 module.exports.define("isValid", function () {
     var valid = true;
     this.doFullKeyRecords(function (record) {
-        if (!record.deleting && record.isModified()) {
+        if (!record.deleting) {
             valid = valid && record.isValid();
         }
     });

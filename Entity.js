@@ -14,12 +14,13 @@ module.exports = Data.FieldSet.clone({
     status: null,       // "N"ew, "C"reating, "L"oading, "U"nmodified, "M"odified, "S"aving, "E"rror
                         // N > C > U > M > S > U,   N > L > U > M > S > U,   S > E,   L > E
     deleting: null,
+    modifiable: false,  // set true immediately by this.createNewRecord(),
+                        // or to modifiable_once_loaded in this.load()
     data_volume_oom: null,                      // expected data size as a power of 10
 });
 
 
-module.exports.register("initCreate");
-module.exports.register("initUpdate");
+module.exports.register("create");
 module.exports.register("load");
 module.exports.register("afterTransChange");
 module.exports.register("presave");
@@ -102,35 +103,41 @@ module.exports.override("isInitializing", function () {
     return (this.status === "C" || this.status === "L");
 });
 
-/*
-module.exports.define("getReadyPromise", function () {
-    if (!this.ready_promise) {
-        if (this.status === "L") {
-            this.ready_promise = this.manager.getLoadingPromise(this);
-        } else if (this.status === "S") {
-            this.ready_promise = this.manager.getSavingPromise(this);
-        } else {
-            this.ready_promise = this.getNullPromise(this);
-        }
-    }
-    return this.ready_promise;
-});
-*/
 
-module.exports.define("populateFromObject", function (obj) {
+module.exports.define("createNewRecord", function (manager) {
+    var record = this.getRecord({
+        manager: manager,
+        status: "C",
+    });
+    record.setDefaultVals();
+    record.status = "U";
+    record.modifiable = true;
+    manager.new_records.push(record);
+    record.happen("create");
+    return record;
+});
+
+
+module.exports.define("load", function (obj) {
+    if (this.status !== 'L') {
+        this.throwError("status should be L");
+    }
+    if (obj.error) {
+        this.setToErrorState(obj.error);
+        return;
+    }
     this.each(function (field) {
         if (typeof obj[field.id] === "string") {
-            field.set(obj[field.id]);
+            field.setInitial(obj[field.id]);
         }
     });
-    // this.uuid = obj.uuid;
-    this.status = "U";        // unmodified
-    if (this.manager && this.isInitializing()) {
-           // if not initializing, addToCache is already called by field.set() above
-        this.manager.addToCache(this, this.getFullKey());
+    if (this.load_key !== this.getFullKey()) {
+        this.throwError("key from loaded fields does not match load_key");
     }
+    delete this.load_key;
+    this.status = "U";        // unmodified
+    this.modifiable = !!this.modifiable_once_loaded;
     this.happen("load");
-    this.happen("initUpdate");
 
     if (this.children) {
         this.populateFromObjectRecursive(obj);
@@ -149,7 +156,7 @@ module.exports.define("populateFromObjectRecursive", function (obj) {
                 if (entity.link_field) {
                     record.getField(entity.link_field).set(that.getFullKey());
                 }
-                record.populateFromObject(obj_sub);
+                record.load(obj_sub);
                 that.children[entity_id].push(record);
             });
         }
@@ -188,23 +195,20 @@ module.exports.define("createChildRecord", function (entity_id) {
     if (!this.parent.children || !this.parent.children[entity_id]) {
         this.throwError("invalid entity_id: " + entity_id);
     }
-    record = this.parent.children[entity_id].getRecord({ modifiable: true, });
+    record = this.parent.children[entity_id].createNewRecord(this.manager);
     this.children[entity_id] = this.children[entity_id] || [];
     this.children[entity_id].push(record);
-    record.setDefaultVals();
     record.parent_record = this;         // support key change linkage
     try {
         record.getField(record.link_field).set(this.getFullKey());
     } catch (e) {
         this.report(e);         // should only be 'primary key field is blank...'
     }
-    // record.linkToParent(this, link_field);
-    record.happen("initCreate");
     return record;
 });
 
 
-module.exports.defbind("setKeyFieldsFixed", "initUpdate", function () {
+module.exports.defbind("setKeyFieldsFixed", "load", function () {
     this.checkKey(this.getFullKey());
     Under.each(this.primary_key, function (key_field) {
         key_field.fixed_key = true;
@@ -296,7 +300,7 @@ module.exports.define("checkKey", function (key) {
 
 module.exports.define("isKeyComplete", function (key) {
     if (typeof key !== "string") {
-        key = this.getKey();
+        key = this.getFullKey();
     }
     try {
         this.checkKey(key);
@@ -423,6 +427,13 @@ module.exports.define("setDelete", function (bool) {
 
 module.exports.define("isDelete", function () {
     return this.deleting;
+});
+
+
+module.exports.define("setToErrorState", function (error) {
+    this.status = "E";
+    this.error = error;
+    this.modifiable = false;
 });
 
 

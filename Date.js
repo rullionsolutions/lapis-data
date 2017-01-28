@@ -1,5 +1,6 @@
 "use strict";
 
+var Core = require("lapis-core");
 var Data = require("lapis-data");
 
 /**
@@ -30,92 +31,12 @@ module.exports.override("getUpdateText", function () {
 });
 
 
-module.exports.define("getDBDateFormat", function (format) {
-    return format
-        .replace("HH", "%H")
-        .replace("mm", "%i")
-        .replace("ss", "%s")
-        .replace("dd", "%z")      // %z - not used by MySQL - holding char
-        .replace("MM", "%m")
-        .replace("yyyy", "%Y")
-        .replace("d", "%e")
-        .replace("M", "%c")
-        .replace("yy", "%y")
-        .replace("%z", "%d");
-});
-
-
 /*
 module.exports.override("getDBTextExpr", function (alias) {
     return "DATE_FORMAT(" + (alias ? alias + ".": "") + this.id + ", '" +
         this.getDBDateFormat(this.display_format) + "')";
 });
 */
-
-/**
-* To attempt to parse a given date (or date/time) string, using given in/out formats if supplied,
-* and applying any 'adjusters'
-* @param A date string, with optional 'adjusters', separated by '+' chars, e.g. 'week-start',
-* 'month-end', '2months', '-3minutes', numbers interpreted as days; 2nd arg is optional string
-* input format, 3rd arg is optional string out format
-* @return Converted date string (if conversion could be performed), otherwise returns the input
-* string
-*/
-module.exports.define("parse", function (val, in_format, out_format) {
-    var parts;
-    var date = new Date();
-
-    if (typeof val !== "string") {
-        return val;
-    }
-    parts = val.split("+");
-    in_format = in_format || this.internal_format;
-    out_format = out_format || this.internal_format;
-    parts.forEach(function (part) {
-        if (part === "today") {
-            return;
-        }
-        if (part === "now") {
-            return;
-        }
-        if (part === "day-start") {
-            date.clearTime();
-        } else if (part === "day-end") {
-            date.setHours(23);
-            date.setMinutes(59);
-            date.setSeconds(59);
-            date.setMilliseconds(999);
-        } else if (part === "week-start") {
-            date.add("d", -((date.getDay() + this.week_start_day) % 7));            // getDay() returns 0 for Sun to 6 for Sat
-        } else if (part === "week-end") {
-            date.add("d", 6 - ((date.getDay() + this.week_start_day) % 7));
-        } else if (part === "month-start") {
-            date.setDate(1);
-        } else if (part === "month-end") {
-            date.add("M", 1);
-            date.setDate(1);
-            date.add("d", -1);
-        } else if (part.indexOf("minutes") > -1) {
-            date.add("m", parseInt(part, 10));
-        } else if (part.indexOf("hours") > -1) {
-            date.add("h", parseInt(part, 10));
-        } else if (part.indexOf("days") > -1) {
-            date.add("d", parseInt(part, 10));
-        } else if (part.indexOf("weeks") > -1) {
-            date.add("d", parseInt(part, 10) * 7);
-        } else if (part.indexOf("months") > -1) {
-            date.add("M", parseInt(part, 10));
-        } else if (part.indexOf("years") > -1) {
-            date.add("y", parseInt(part, 10));
-        } else if (parseInt(part, 10).toFixed(0) === part) {
-            date.add("d", parseInt(part, 10));
-        } else {
-            date = new Date(Date.parse(part));      // TODO - inadequate parsing
-        }
-    });
-    return (date ? date.toUTCString() : val);
-});
-
 
 /**
 * Syntactic sugar - equivalent to this.parse(val, this.internal_format, this.display_format)
@@ -126,7 +47,7 @@ module.exports.define("parse", function (val, in_format, out_format) {
 * otherwise returns the input string
 */
 module.exports.define("parseDisplay", function (val) {
-    return this.parse(val, this.internal_format, this.display_format);
+    return Base.Format.parseDateExpression(val, this.internal_format, this.display_format);
 });
 
 

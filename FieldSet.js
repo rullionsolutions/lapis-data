@@ -123,7 +123,7 @@ module.exports.override("replaceToken", function (token) {
     this.trace("replaceToken(): " + token);
     token = token.split("|");
     if (token[0] === "key" && typeof this.getKey === "function") {
-        return this.getKey();
+        return this.getFullKey();
     }
     field = this.getField(token[0]);
     if (!field) {

@@ -1,9 +1,7 @@
 "use strict";
 
 var Core = require("lapis-core");
-var Data = require("lapis-data");
-var Under = require("underscore");
-var Https = require("https");
+var Http = require("http");
 var Q = require("q");
 
 
@@ -19,45 +17,14 @@ module.exports.register("successResponse");
 module.exports.register("errorResponse");
 
 
-module.exports.defbind("setupArray", "cloneInstance", function () {
-    this.criteria = [];
+module.exports.defbind("setupStatus", "cloneInstance", function () {
     this.status = "D";
     this.promise = null;
 });
 
 
-Data.Manager.define("getRequest", function (spec_or_array) {
-    var request = module.exports.clone({
-        id: "Request",
-        instance: true,
-        manager: this,
-    });
-    if (Under.isArray(spec_or_array)) {
-        Under.each(spec_or_array, function (item) {
-            request.addCriterion(item);
-        });
-    } else {
-        request.addCriterion(spec_or_array);
-    }
-    return request;
-});
-
-
-module.exports.define("getLoadingPromise", function (record) {
+module.exports.define("getPromise", function () {
     return this.promise;
-});
-
-
-module.exports.define("addCriterion", function (spec) {
-    if (!spec.entity_id) {
-        this.throwError("invalid criterion, 'entity_id' required: " + spec);
-    }
-    if (spec.key && typeof spec.key === "string") {
-        spec.record = this.manager.getExistingRecordNotInCache(spec.entity_id, spec.key);
-    } else if (!spec.field_id || !spec.value) {
-        this.throwError("invalid criterion, 'field_id' and 'value' required: " + spec);
-    }
-    this.criteria.push(spec);
 });
 
 
@@ -70,8 +37,10 @@ module.exports.define("execute", function () {
     this.happen("beforeRequest");
     this.status = "R";
     this.promise = Q.Promise(function (resolve, reject) {
+        var req;
+        var post_data;
         try {
-            Https.get(that.manager.getServerHttpOptions(), function (response) {
+            req = Http.request(that.manager.getServerHttpOptions(), function (response) {
                 try {
                     that.processResponse(resolve, reject, response);
                     // resolve();
@@ -82,10 +51,14 @@ module.exports.define("execute", function () {
                 } finally {
                     response.resume();      // consume response data to free up memory
                 }
-            }).on("error", function (error) {
+            });
+            req.on("error", function (error) {
                 that.errorResponse(error);
                 reject(error);
             });
+            post_data = that.getRequestData();
+            that.debug("post data: " + post_data);
+            req.end(post_data);
         } catch (error) {
             that.errorResponse(error);
             reject(error);
@@ -122,26 +95,6 @@ module.exports.define("processResponse", function (resolve, reject, response) {
             reject(error);
         }
     });
-});
-
-
-module.exports.define("successResponse", function (raw_data) {
-    var that = this;
-    var parsed_data;
-    if (this.status !== "R") {
-        this.throwError("invalid status: " + this.status);
-    }
-    this.status = "C";
-    try {
-        parsed_data = JSON.parse(raw_data);
-        Under.each(parsed_data, function (item) {
-            that.manager.getExistingRecordNotInCache(item.entity_id, item.key)
-                .populateFromObject(item);
-        });
-        this.happen("successResponse");
-    } catch (error) {
-        this.throwError("invalid JSON received: " + error);
-    }
 });
 
 

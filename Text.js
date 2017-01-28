@@ -78,18 +78,24 @@ module.exports.define("isBlank", function (val) {
 });
 
 
+module.exports.define("isInitializing", function () {
+    return (this.owner && this.owner.isInitializing());
+});
+
+
 module.exports.define("setDefaultVal", function () {
-    if (!this.isInitializing()) {
-        this.throwError("not currently initializing");
-    }
     if (this.default_val) {
-        this.set(this.default_val);
+        this.setInitial(this.default_val);
     }
 });
 
 
-module.exports.define("isInitializing", function () {
-    return (this.owner && this.owner.isInitializing());
+module.exports.define("setInitial", function (new_val) {
+    if (!this.isInitializing()) {
+        this.throwError("setDefaultVal() only allowed when initializing");
+    }
+    this.setPreChecks(new_val);
+    this.setInternal(new_val, "<init>");
 });
 
 
@@ -102,39 +108,45 @@ module.exports.define("isInitializing", function () {
 */
 module.exports.define("set", function (new_val) {
     var old_val = this.get();
-    if (!this.isInitializing()) {
-        this.prev_val = old_val;            // to support isChangedSincePreviousUpdate()
+    if (this.isInitializing()) {
+        this.throwError("set() not allowed when initializing");
     }
+    this.prev_val = old_val;            // to support isChangedSincePreviousUpdate()
+    this.setPreChecks(new_val);
+    if (new_val === this.val) {
+        return false;
+    }
+    if (this.owner && typeof this.owner.beforeFieldChange === "function") {
+        this.owner.beforeFieldChange(this, new_val);            // May throw an error
+    }
+    this.happen("beforeChange", new_val);
+    this.setInternal(new_val, old_val);
+    this.modified = true;
+    if (this.owner && typeof this.owner.afterFieldChange === "function") {
+        this.owner.afterFieldChange(this, old_val);
+    }
+    this.happen("afterChange", old_val);
+    return true;
+});
+
+
+module.exports.define("setPreChecks", function (new_val) {
     if (typeof new_val !== "string") {
         this.throwError("argument not string: " + this.owner.id + "." + this.id);
     }
     if (this.fixed_key) {
         this.throwError("fixed key");
     }
-    if (new_val === this.val) {
-        return false;
-    }
-    if (!this.isInitializing()) {
-        if (this.owner && typeof this.owner.beforeFieldChange === "function") {
-            this.owner.beforeFieldChange(this, new_val);            // May throw an error
-        }
-        this.happen("beforeChange", new_val);
-    }
+});
+
+
+module.exports.define("setInternal", function (new_val, old_val) {
     this.val = new_val;
     this.text = null;
     this.url = null;
     this.validated = false;
     this.trace("setting " + this.getId() + " from '" + old_val + "' to '" + new_val + "'");
-    if (!this.isInitializing()) {
-        this.modified = true;
-        if (this.owner && typeof this.owner.afterFieldChange === "function") {
-            this.owner.afterFieldChange(this, old_val);
-        }
-        this.happen("afterChange", old_val);
-    }
-    return true;
 });
-
 
 /**
 * Returns the value of this field's id property
